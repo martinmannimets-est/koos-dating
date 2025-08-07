@@ -1,82 +1,81 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function Home() {
-  const [data, setData] = useState({ buy: [], sell: [], hold: [] });
+  const [data, setData] = useState(null);
   const [countdown, setCountdown] = useState(5);
 
-  const fetchData = async () => {
-    try {
+  useEffect(() => {
+    const fetchData = async () => {
       const res = await fetch("/api/stocks");
       const json = await res.json();
       setData(json);
-    } catch (e) {
-      console.error("Fetch error:", e);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(() => {
-      fetchData();
       setCountdown(5);
-    }, 5000);
+    };
 
-    const countdownInterval = setInterval(() => {
-      setCountdown((prev) => (prev > 0 ? prev - 1 : 5));
+    fetchData();
+
+    const interval = setInterval(() => {
+      setCountdown((c) => (c === 1 ? 5 : c - 1));
+      if (countdown === 1) fetchData();
     }, 1000);
 
-    return () => {
-      clearInterval(interval);
-      clearInterval(countdownInterval);
-    };
-  }, []);
+    return () => clearInterval(interval);
+  }, [countdown]);
+
+  if (!data) return <p>Loading...</p>;
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Trading Recommendations (refreshes every 5 seconds)</h1>
-      <p>Next refresh in: {countdown} sec</p>
+    <div style={{ maxWidth: 600, margin: "auto", fontFamily: "Arial, sans-serif", padding: 20 }}>
+      <h1>Crypto Trading Simulator</h1>
+      <p>Balance: €{data.balance}</p>
 
-      <section>
-        <h2>BUY</h2>
-        {data.buy.length === 0 ? (
-          <p>No stocks</p>
-        ) : (
-          data.buy.map((stock) => (
-            <div key={stock.symbol}>
-              {stock.symbol}: Buy at {stock.buyPrice.toFixed(2)} — Sell at{" "}
-              {stock.sellPrice.toFixed(2)}
-            </div>
-          ))
-        )}
-      </section>
+      <h2>Holdings:</h2>
+      <ul>
+        {Object.entries(data.holdings).map(([symbol, amount]) => (
+          <li key={symbol}>
+            {symbol.toUpperCase()}: {amount.toFixed(6)}
+          </li>
+        ))}
+      </ul>
 
-      <section>
-        <h2>SELL</h2>
-        {data.sell.length === 0 ? (
-          <p>No stocks</p>
-        ) : (
-          data.sell.map((stock) => (
-            <div key={stock.symbol}>
-              {stock.symbol}: Sell at {stock.sellPrice.toFixed(2)} — Buy at{" "}
-              {stock.buyPrice.toFixed(2)}
-            </div>
-          ))
-        )}
-      </section>
+      <h2>Current Prices (EUR):</h2>
+      <ul>
+        {Object.entries(data.prices).map(([symbol, priceObj]) => (
+          <li key={symbol}>
+            {symbol.toUpperCase()}: €{priceObj.eur}
+          </li>
+        ))}
+      </ul>
 
-      <section>
-        <h2>HOLD</h2>
-        {data.hold.length === 0 ? (
-          <p>No stocks</p>
-        ) : (
-          data.hold.map((stock) => (
-            <div key={stock.symbol}>
-              {stock.symbol}: Hold between {stock.buyPrice.toFixed(2)} and{" "}
-              {stock.sellPrice.toFixed(2)}
-            </div>
-          ))
-        )}
-      </section>
+      <h2>Trade Log:</h2>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid #ccc" }}>
+            <th>Time</th>
+            <th>Type</th>
+            <th>Symbol</th>
+            <th>Amount</th>
+            <th>Price (€)</th>
+            <th>Fee (€)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.tradeLog.map((trade, idx) => (
+            <tr key={idx} style={{ borderBottom: "1px solid #eee" }}>
+              <td>{new Date(trade.timestamp).toLocaleString()}</td>
+              <td>{trade.type}</td>
+              <td>{trade.symbol.toUpperCase()}</td>
+              <td>{trade.amount.toFixed(6)}</td>
+              <td>{trade.price.toFixed(2)}</td>
+              <td>{trade.fee.toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p style={{ marginTop: 20, fontStyle: "italic" }}>
+        Data refreshes every 5 seconds.
+      </p>
     </div>
   );
 }
