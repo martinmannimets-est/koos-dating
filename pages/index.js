@@ -1,76 +1,103 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
+
+const symbolsToTrack = ["AAPL", "TSLA", "AMZN", "NFLX", "GOOGL"];
 
 export default function Home() {
-  const [data, setData] = useState({ buy: [], sell: [], hold: [] });
-  const [countdown, setCountdown] = useState(5);
-  const countdownRef = useRef(5);
+  const [stockData, setStockData] = useState({});
+  const [secondsLeft, setSecondsLeft] = useState(5);
+  const intervalRef = useRef(null);
 
-  const loadData = async () => {
-    try {
-      const res = await fetch("/api/stocks");
-      if (!res.ok) throw new Error("Failed to fetch");
-      const json = await res.json();
-      setData(json);
-      setCountdown(5);
-      countdownRef.current = 5;
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  // Funktsioon, mis teeb API päringu ühe sümboli kohta
+  async function fetchStock(symbol) {
+    const res = await fetch(`/api/stock?symbol=${symbol}`);
+    if (!res.ok) return null;
+    return res.json();
+  }
 
+  // Lae kõik sümbolid ja salvesta andmed
+  async function fetchAllStocks() {
+    const results = await Promise.all(symbolsToTrack.map(fetchStock));
+    const data = {};
+    symbolsToTrack.forEach((sym, i) => {
+      data[sym] = results[i];
+    });
+    setStockData(data);
+    setSecondsLeft(5);
+  }
+
+  // Käivita alglaadimisel ja iga 5 sekundi tagant
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 5000);
-
-    const countdownInterval = setInterval(() => {
-      countdownRef.current = countdownRef.current > 0 ? countdownRef.current - 1 : 0;
-      setCountdown(countdownRef.current);
+    fetchAllStocks();
+    intervalRef.current = setInterval(() => {
+      setSecondsLeft((sec) => {
+        if (sec <= 1) {
+          fetchAllStocks();
+          return 5;
+        }
+        return sec - 1;
+      });
     }, 1000);
 
-    return () => {
-      clearInterval(interval);
-      clearInterval(countdownInterval);
-    };
+    return () => clearInterval(intervalRef.current);
   }, []);
 
+  // Lihtne analüüs: kui hind tõuseb, siis BUY, kui langeb SELL, muidu HOLD
+  function categorizeStocks() {
+    const buy = [];
+    const sell = [];
+    const hold = [];
+
+    Object.values(stockData).forEach((stock) => {
+      if (!stock) return;
+      if (stock.change > 0) buy.push(stock);
+      else if (stock.change < 0) sell.push(stock);
+      else hold.push(stock);
+    });
+
+    return { buy, sell, hold };
+  }
+
+  const { buy, sell, hold } = categorizeStocks();
+
   return (
-    <div style={{ maxWidth: 900, margin: "auto", padding: 20, fontFamily: "Arial, sans-serif" }}>
-      <h1 style={{ textAlign: "center" }}>Day Trading AI Recommendations</h1>
-      <p style={{ textAlign: "center", fontSize: 14, color: "#555" }}>
-        Refreshing prices in: {countdown} second{countdown !== 1 ? "s" : ""}
-      </p>
+    <div style={{ padding: 20, fontFamily: "Arial, sans-serif" }}>
+      <h1>Trading Recommendations (refreshes every 5 seconds)</h1>
+      <p>Next refresh in: {secondsLeft} sec</p>
 
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
-        <section style={{ flex: 1, border: "2px solid green", padding: 15, borderRadius: 8 }}>
-          <h2 style={{ color: "green" }}>BUY</h2>
-          {data.buy.length === 0 && <p>No BUY recommendations currently</p>}
-          {data.buy.map(({ symbol, buyPrice, sellPrice }) => (
-            <div key={symbol} style={{ marginBottom: 10 }}>
-              <strong>{symbol}</strong>: Buy Price <b>${buyPrice.toFixed(2)}</b> / Sell Price ${sellPrice.toFixed(2)}
-            </div>
-          ))}
-        </section>
+      <Section title="BUY" stocks={buy} showSellPrice />
+      <Section title="SELL" stocks={sell} showBuyPrice />
+      <Section title="HOLD" stocks={hold} showBuyPrice showSellPrice />
+    </div>
+  );
+}
 
-        <section style={{ flex: 1, border: "2px solid red", padding: 15, borderRadius: 8 }}>
-          <h2 style={{ color: "red" }}>SELL</h2>
-          {data.sell.length === 0 && <p>No SELL recommendations currently</p>}
-          {data.sell.map(({ symbol, sellPrice, buyPrice }) => (
-            <div key={symbol} style={{ marginBottom: 10 }}>
-              <strong>{symbol}</strong>: Sell Price <b>${sellPrice.toFixed(2)}</b> / Buy Price ${buyPrice.toFixed(2)}
-            </div>
-          ))}
-        </section>
-
-        <section style={{ flex: 1, border: "2px solid orange", padding: 15, borderRadius: 8 }}>
-          <h2 style={{ color: "orange" }}>HOLD</h2>
-          {data.hold.length === 0 && <p>No HOLD recommendations currently</p>}
-          {data.hold.map(({ symbol, price, buyPrice, sellPrice }) => (
-            <div key={symbol} style={{ marginBottom: 10 }}>
-              <strong>{symbol}</strong>: Current Price ${price.toFixed(2)} / Buy ${buyPrice.toFixed(2)} / Sell ${sellPrice.toFixed(2)}
-            </div>
-          ))}
-        </section>
-      </div>
+function Section({ title, stocks, showBuyPrice, showSellPrice }) {
+  return (
+    <div style={{ marginBottom: 40 }}>
+      <h2>{title}</h2>
+      {stocks.length === 0 && <p>No stocks</p>}
+      {stocks.map((stock) => (
+        <div
+          key={stock.symbol}
+          style={{
+            border: "1px solid #ddd",
+            padding: 10,
+            marginBottom: 10,
+            borderRadius: 6,
+          }}
+        >
+          <strong>{stock.symbol}</strong> - Price: {stock.price} {stock.currency}
+          <br />
+          Change: {stock.change.toFixed(2)} ({stock.changePercent.toFixed(2)}%)
+          <br />
+          {showBuyPrice && stock.bid !== undefined && (
+            <>Buy Price (Bid): {stock.bid} {stock.currency}<br /></>
+          )}
+          {showSellPrice && stock.ask !== undefined && (
+            <>Sell Price (Ask): {stock.ask} {stock.currency}</>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
