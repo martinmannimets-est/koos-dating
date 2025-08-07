@@ -1,20 +1,19 @@
-import fetch from "node-fetch";
-
 export default async function handler(req, res) {
-  const coins = ["bitcoin", "ethereum", "cardano", "dogecoin", "solana"];
+  const symbols = ["bitcoin", "ethereum", "litecoin"]; // Crypto coins CoinGecko API-s
 
   try {
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${coins.join(
-        ","
-      )}&vs_currencies=usd`
+    const results = await Promise.all(
+      symbols.map(async (symbol) => {
+        const response = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${symbol}&vs_currencies=usd`
+        );
+        const data = await response.json();
+        return {
+          symbol: symbol.toUpperCase(),
+          price: data[symbol]?.usd ?? null,
+        };
+      })
     );
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch data from CoinGecko");
-    }
-
-    const data = await response.json();
 
     const recommendations = {
       buy: [],
@@ -22,30 +21,34 @@ export default async function handler(req, res) {
       hold: [],
     };
 
-    for (const coin of coins) {
-      const price = data[coin]?.usd || 0;
+    results.forEach(({ symbol, price }) => {
+      if (price === null) return;
 
-      if (Math.floor(price) % 2 === 0) {
-        recommendations.sell.push({
-          symbol: coin.toUpperCase(),
-          price,
-        });
-      } else if (Math.floor(price) % 2 === 1) {
+      if (Math.floor(price) % 2 === 1) {
         recommendations.buy.push({
-          symbol: coin.toUpperCase(),
-          price,
+          symbol,
+          buyPrice: price,
+          sellPrice: price + 0.5,
+        });
+      } else if (Math.floor(price) % 2 === 0) {
+        recommendations.sell.push({
+          symbol,
+          sellPrice: price,
+          buyPrice: price - 0.5,
         });
       } else {
         recommendations.hold.push({
-          symbol: coin.toUpperCase(),
+          symbol,
           price,
+          buyPrice: price - 0.5,
+          sellPrice: price + 0.5,
         });
       }
-    }
+    });
 
     res.status(200).json(recommendations);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch crypto data" });
+    console.error("Failed to fetch data from CoinGecko", error);
+    res.status(500).json({ error: "Failed to fetch data from CoinGecko" });
   }
 }
