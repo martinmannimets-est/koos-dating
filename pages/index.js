@@ -1,81 +1,53 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 export default function Home() {
-  const [data, setData] = useState(null);
-  const [countdown, setCountdown] = useState(5);
+  const [tradeData, setTradeData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const res = await fetch("/api/crypto");
-      const json = await res.json();
-      setData(json);
-      setCountdown(5);
-    };
+    async function fetchTradeData() {
+      try {
+        const res = await fetch('/api/trade');
+        if (!res.ok) throw new Error('API error: ' + res.status);
+        const data = await res.json();
+        setTradeData(data);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
 
-    fetchData();
+    fetchTradeData();
 
-    const interval = setInterval(() => {
-      setCountdown((c) => (c === 1 ? 5 : c - 1));
-      if (countdown === 1) fetchData();
-    }, 1000);
+    // Soovi korral pane perioodiline uuendamine
+    const interval = setInterval(fetchTradeData, 60 * 1000); // iga 1 min
 
     return () => clearInterval(interval);
-  }, [countdown]);
+  }, []);
 
-  if (!data) return <p>Loading...</p>;
+  if (loading) return <div>Laen andmeid...</div>;
+  if (error) return <div>Tekkis viga: {error}</div>;
 
   return (
-    <div style={{ maxWidth: 600, margin: "auto", fontFamily: "Arial, sans-serif", padding: 20 }}>
-      <h1>Crypto Trading Simulator</h1>
-      <p>Balance: €{data.balance}</p>
+    <div style={{ maxWidth: 600, margin: 'auto', padding: 20, fontFamily: 'Arial, sans-serif' }}>
+      <h1>Krüpto Trading Bot Dashboard</h1>
 
-      <h2>Holdings:</h2>
+      <p><strong>BTC praegune hind:</strong> {tradeData.price.toFixed(2)} EUR</p>
+      <p><strong>Kontojääk EUR:</strong> {tradeData.balance.toFixed(2)} €</p>
+      <p><strong>Omaduses BTC:</strong> {tradeData.btcAmount.toFixed(6)} BTC</p>
+      <p><strong>Kasum:</strong> {tradeData.profit.toFixed(2)} €</p>
+
+      <h2>Tehingute ajalugu</h2>
+      {tradeData.trades.length === 0 && <p>Tehinguid veel ei ole.</p>}
       <ul>
-        {Object.entries(data.holdings).map(([symbol, amount]) => (
-          <li key={symbol}>
-            {symbol.toUpperCase()}: {amount.toFixed(6)}
+        {tradeData.trades.map((trade, i) => (
+          <li key={i} style={{ marginBottom: 6 }}>
+            [{new Date(trade.timestamp).toLocaleString()}] <strong>{trade.type.toUpperCase()}</strong> {trade.btc.toFixed(6)} BTC @ {trade.price.toFixed(2)} EUR (tasud: {trade.fee} €)
           </li>
         ))}
       </ul>
-
-      <h2>Current Prices (EUR):</h2>
-      <ul>
-        {Object.entries(data.prices).map(([symbol, priceObj]) => (
-          <li key={symbol}>
-            {symbol.toUpperCase()}: €{priceObj.eur}
-          </li>
-        ))}
-      </ul>
-
-      <h2>Trade Log:</h2>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid #ccc" }}>
-            <th>Time</th>
-            <th>Type</th>
-            <th>Symbol</th>
-            <th>Amount</th>
-            <th>Price (€)</th>
-            <th>Fee (€)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.tradeLog.map((trade, idx) => (
-            <tr key={idx} style={{ borderBottom: "1px solid #eee" }}>
-              <td>{new Date(trade.timestamp).toLocaleString()}</td>
-              <td>{trade.type}</td>
-              <td>{trade.symbol.toUpperCase()}</td>
-              <td>{trade.amount.toFixed(6)}</td>
-              <td>{trade.price.toFixed(2)}</td>
-              <td>{trade.fee.toFixed(2)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <p style={{ marginTop: 20, fontStyle: "italic" }}>
-        Data refreshes every 5 seconds.
-      </p>
     </div>
   );
 }
