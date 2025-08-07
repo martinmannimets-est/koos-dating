@@ -1,100 +1,145 @@
-import fs from "fs/promises";
+import fs from "fs";
 import path from "path";
 
-const DATA_PATH = path.join(process.cwd(), "data", "trades.json");
+const LOG_FILE = path.resolve("./trade-log.json");
 
-const MAX_BUY_AMOUNT = 1000; // €
-const TRADE_FEE = 1; // €
-const symbols = ["bitcoin", "ethereum", "ripple"];
+const INITIAL_BALANCE = 10000;
+const MAX_TRADE_AMOUNT = 1000;
+const TRADE_FEE = 1;
 
-async function fetchPrices() {
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${symbols.join(',')}&vs_currencies=eur`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch prices");
-  return res.json();
-}
+const SYMBOL = "bitcoin"; // CoinGecko id
 
-async function readData() {
+// Lae log failist või alusta uuest
+function loadLog() {
   try {
-    const fileData = await fs.readFile(DATA_PATH, "utf-8");
-    return JSON.parse(fileData);
+    const data = fs.readFileSync(LOG_FILE, "utf8");
+    return JSON.parse(data);
   } catch {
-    // Kui faili pole, tagasta vaikimisi andmed
-    return {
-      balance: 10000,
-      holdings: {},
-      tradeLog: [],
-    };
+    return [];
   }
 }
 
-async function writeData(data) {
-  await fs.writeFile(DATA_PATH, JSON.stringify(data, null, 2));
+function saveLog(log) {
+  fs.writeFileSync(LOG_FILE, JSON.stringify(log, null, 2));
+}
+
+// Arvuta portfelli väärtus (raha + krüpto väärtus)
+function calculatePortfolioValue(log, currentPrice) {
+  let cash = INITIAL_BALANCE;
+  let cryptoAmount = 0;
+
+  log.forEach((trade) => {
+    if (trade.type === "buy") {
+      cash -= trade.amount + TRADE_FEE;
+      cryptoAmount += trade.amount / trade.price;
+    } else if (trade.type === "sell") {
+      cash += trade.amount - TRADE_FEE;
+      cryptoAmount -= trade.amount / trade.price;
+    }
+  });
+
+  return cash + cryptoAmount * currentPrice;
+}
+
+// Arvuta 24h tagune portfelliväärtus, et näidata kasumit
+function portfolioValue24hAgo(log, currentPrice) {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const log24h = log.filter((trade) => new Date(trade.date).getTime() <= cutoff);
+  
+  let cash = INITIAL_BALANCE;
+  let cryptoAmount = 0;
+
+  log24h.forEach((trade) => {
+    if (trade.type === "buy") {
+      cash -= trade.amount + TRADE_FEE;
+      cryptoAmount += trade.amount / trade.price;
+    } else if (trade.type === "sell") {
+      cash += trade.amount - TRADE_FEE;
+      cryptoAmount -= trade.amount / trade.price;
+    }
+  });
+
+  return cash + cryptoAmount * currentPrice;
 }
 
 export default async function handler(req, res) {
+  const log = loadLog();
+
+  // Lae hind CoinGecko API-st
   try {
-    // Loe olemasolev seis
-    const data = await readData();
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${SYMBOL}&vs_currencies=eur`
+    );
+    const data = await response.json();
+    const currentPrice = data[SYMBOL]?.eur;
 
-    const prices = await fetchPrices();
+    if (!currentPrice) {
+      throw new Error("Price data not found");
+    }
 
-    let { balance, holdings, tradeLog } = data;
+    // Lihtne automaatika: ostame, kui hind on madal (random näide), müüme, kui hind on kõrge
+    // Võid asendada enda strateegiaga
+    const lastTrade = log.length ? log[log.length - 1] : null;
+    const shouldBuy = !lastTrade || currentPrice < (lastTrade.price * 0.98);
+    const shouldSell = lastTrade && currentPrice > (lastTrade.price * 1.02);
 
-    // Simuleeri tehinguid iga mündi kohta
-    for (const symbol of symbols) {
-      const price = prices[symbol].eur;
+    // Arvuta praegune portfelliväärtus
+    const portfolioValue = calculatePortfolioValue(log, currentPrice);
+    const portfolioValue24h = portfolioValue24hAgo(log, currentPrice);
+    const profit24h = portfolioValue - portfolioValue24h;
 
-      // Kui pole hoitud münti, osta
-      if (!holdings[symbol] || holdings[symbol] === 0) {
-        if (balance > MAX_BUY_AMOUNT + TRADE_FEE) {
-          const amountToBuy = MAX_BUY_AMOUNT / price;
-          holdings[symbol] = (holdings[symbol] || 0) + amountToBuy;
-          balance -= MAX_BUY_AMOUNT + TRADE_FEE;
-          tradeLog.push({
-            type: 'BUY',
-            symbol,
-            price,
-            amount: amountToBuy,
-            fee: TRADE_FEE,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      } else {
-        // Müü kui hind on tõusnud 1% võrra
-        const buys = tradeLog.filter(t => t.type === 'BUY' && t.symbol === symbol);
-        const totalAmountBought = buys.reduce((acc, t) => acc + t.amount, 0);
-        const totalCost = buys.reduce((acc, t) => acc + t.price * t.amount, 0);
-        const avgBuyPrice = totalCost / totalAmountBought;
+    if (shouldBuy) {
+      // Kontrollime, et on piisavalt raha ostmiseks
+      // Arvutame ostetava summa (max MAX_TRADE_AMOUNT)
+      let cashAvailable = portfolioValue - (log.reduce((acc, t) => {
+        if (t.type === "buy") return acc + t.amount + TRADE_FEE;
+        else return acc;
+      }, 0));
 
-        if (price > avgBuyPrice * 1.01) {
-          const amountToSell = holdings[symbol];
-          holdings[symbol] = 0;
-          const revenue = amountToSell * price;
-          balance += revenue - TRADE_FEE;
-          tradeLog.push({
-            type: 'SELL',
-            symbol,
-            price,
-            amount: amountToSell,
-            fee: TRADE_FEE,
-            timestamp: new Date().toISOString(),
-          });
-        }
+      const buyAmount = Math.min(MAX_TRADE_AMOUNT, cashAvailable);
+      if (buyAmount > TRADE_FEE) {
+        log.push({
+          type: "buy",
+          price: currentPrice,
+          amount: buyAmount,
+          fee: TRADE_FEE,
+          date: new Date().toISOString(),
+        });
+      }
+    } else if (shouldSell) {
+      // Müük
+      // Lihtsuse mõttes müüme MAX_TRADE_AMOUNT, kui portfellis on krüptot
+      const cryptoHeld = log.reduce((acc, t) => {
+        if (t.type === "buy") return acc + t.amount / t.price;
+        else if (t.type === "sell") return acc - t.amount / t.price;
+        else return acc;
+      }, 0);
+
+      const sellAmount = Math.min(MAX_TRADE_AMOUNT, cryptoHeld * currentPrice);
+      if (sellAmount > TRADE_FEE) {
+        log.push({
+          type: "sell",
+          price: currentPrice,
+          amount: sellAmount,
+          fee: TRADE_FEE,
+          date: new Date().toISOString(),
+        });
       }
     }
 
-    // Kirjuta uuendatud seis faili
-    await writeData({ balance, holdings, tradeLog });
+    saveLog(log);
+
+    // Sorteeri viimased tehingud kuupäeva järgi ja võta viimased 20
+    const recentTrades = [...log].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 20);
 
     res.status(200).json({
-      balance: balance.toFixed(2),
-      holdings,
-      tradeLog,
-      prices,
+      portfolioValue: portfolioValue.toFixed(2),
+      profit24h: profit24h.toFixed(2),
+      recentTrades,
+      currentPrice,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Fetch error:", error);
     res.status(500).json({ error: "Failed to fetch or process data" });
   }
 }
