@@ -1,28 +1,50 @@
-import yahooFinance from 'yahoo-finance2';
-
-const STOCKS = ['AAPL', 'TSLA', 'AMZN', 'GOOGL', 'MSFT'];
+// pages/api/stocks.js
 
 export default async function handler(req, res) {
   try {
-    const results = [];
+    const response = await fetch("https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=demo");
+    const data = await response.json();
 
-    for (const symbol of STOCKS) {
-      const quote = await yahooFinance.quoteSummary(symbol, { modules: ['price'] });
-      const price = quote.price.regularMarketPrice;
-      const previousClose = quote.price.regularMarketPreviousClose;
+    const topFive = data.tickers.slice(0, 5).map((ticker) => ({
+      symbol: ticker.ticker,
+      price: ticker.lastTrade.p,
+    }));
 
-      results.push({ symbol, price, previousClose });
-    }
+    const recommendations = {
+      buy: [],
+      sell: [],
+      hold: [],
+    };
 
-    // Lihtne analüüs: kui hind tõusis võrreldes eelmise sulgemishinnaga, siis "BUY"
-    // Kui langes, siis "SELL", muidu "HOLD"
-    const buy = results.filter(stock => stock.price > stock.previousClose);
-    const sell = results.filter(stock => stock.price < stock.previousClose);
-    const hold = results.filter(stock => stock.price === stock.previousClose);
+    topFive.forEach((stock) => {
+      const { symbol, price } = stock;
+      const mockSpread = 0.5;
 
-    res.status(200).json({ buy, sell, hold });
+      if (Math.floor(price) % 2 === 1) {
+        recommendations.buy.push({
+          symbol,
+          buyPrice: price,
+          sellPrice: price + mockSpread,
+        });
+      } else if (Math.floor(price) % 2 === 0) {
+        recommendations.sell.push({
+          symbol,
+          sellPrice: price,
+          buyPrice: price - mockSpread,
+        });
+      } else {
+        recommendations.hold.push({
+          symbol,
+          price,
+          buyPrice: price - mockSpread,
+          sellPrice: price + mockSpread,
+        });
+      }
+    });
+
+    res.status(200).json(recommendations);
   } catch (error) {
-    console.error('Error fetching stock data:', error);
-    res.status(500).json({ error: 'Failed to fetch stock data' });
+    console.error("Stock fetch failed", error);
+    res.status(500).json({ error: "Failed to fetch stock data" });
   }
 }
