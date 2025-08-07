@@ -1,23 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
+import styles from '../styles/Home.module.css';
 
 export default function Home() {
-  const [data, setData] = useState({ buy: [], sell: [], hold: [] });
-  const [countdown, setCountdown] = useState(5);
+  const [recommendations, setRecommendations] = useState({ buy: [], sell: [], hold: [] });
+  const [refreshCountdown, setRefreshCountdown] = useState(30);
+
+  // Funktsioon andmete laadimiseks API-st
+  async function fetchData() {
+    try {
+      const res = await fetch('/api/stocks');
+      const data = await res.json();
+      setRecommendations(data);
+      setRefreshCountdown(30);
+    } catch (err) {
+      console.error('Failed to fetch stock data', err);
+    }
+  }
 
   useEffect(() => {
-    const fetchData = async () => {
-      const res = await fetch("/api/stocks");
-      const json = await res.json();
-      setData(json);
-    };
-
     fetchData();
 
+    // Timer uuendamiseks iga sekundi tagant
     const interval = setInterval(() => {
-      setCountdown((prev) => {
+      setRefreshCountdown(prev => {
         if (prev === 1) {
           fetchData();
-          return 5;
+          return 30;
         }
         return prev - 1;
       });
@@ -26,49 +34,42 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  function renderList(items) {
+    if (!items.length) {
+      return <li>No stocks</li>;
+    }
+    return items.map(({ symbol, buyPrice, sellPrice, price }) => (
+      <li key={symbol} className={styles.stockItem}>
+        <span>{symbol}</span>
+        <span className={styles.stockPrice}>
+          {buyPrice ? `Buy: $${buyPrice.toFixed(2)}` : price ? `$${price.toFixed(2)}` : '-'}{' '}
+          / {sellPrice ? `Sell: $${sellPrice.toFixed(2)}` : '-'}
+        </span>
+      </li>
+    ));
+  }
+
   return (
-    <div style={{ padding: 20, fontFamily: "Arial, sans-serif" }}>
-      <h1>Crypto Trading Recommendations (refreshes every 5 seconds)</h1>
-      <p>Next refresh in: {countdown} sec</p>
+    <div className={styles.container}>
+      <header className={styles.header}>
+        <h1>Trading Recommendations</h1>
+        <div className={styles.countdown}>Next refresh in: {refreshCountdown} sec</div>
+      </header>
 
-      <h2>BUY</h2>
-      {data.buy.length === 0 ? (
-        <p>No cryptos</p>
-      ) : (
-        <ul>
-          {data.buy.map(({ symbol, price }) => (
-            <li key={symbol}>
-              {symbol} - ${price}
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className={styles.section}>
+        <h2>BUY</h2>
+        <ul className={styles.stockList}>{renderList(recommendations.buy)}</ul>
+      </section>
 
-      <h2>SELL</h2>
-      {data.sell.length === 0 ? (
-        <p>No cryptos</p>
-      ) : (
-        <ul>
-          {data.sell.map(({ symbol, price }) => (
-            <li key={symbol}>
-              {symbol} - ${price}
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className={styles.section}>
+        <h2>SELL</h2>
+        <ul className={styles.stockList}>{renderList(recommendations.sell)}</ul>
+      </section>
 
-      <h2>HOLD</h2>
-      {data.hold.length === 0 ? (
-        <p>No cryptos</p>
-      ) : (
-        <ul>
-          {data.hold.map(({ symbol, price }) => (
-            <li key={symbol}>
-              {symbol} - ${price}
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className={styles.section}>
+        <h2>HOLD</h2>
+        <ul className={styles.stockList}>{renderList(recommendations.hold)}</ul>
+      </section>
     </div>
   );
 }

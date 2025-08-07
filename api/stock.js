@@ -1,50 +1,34 @@
-// pages/api/stocks.js
+let cache = null;
+let cacheTimestamp = 0;
+const CACHE_DURATION = 30 * 1000; // 30 sekundit
 
 export default async function handler(req, res) {
-  try {
-    const response = await fetch("https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=demo");
-    const data = await response.json();
+  const now = Date.now();
+  if (cache && now - cacheTimestamp < CACHE_DURATION) {
+    return res.status(200).json(cache);
+  }
 
-    const topFive = data.tickers.slice(0, 5).map((ticker) => ({
-      symbol: ticker.ticker,
-      price: ticker.lastTrade.p,
+  try {
+    const coins = ['bitcoin', 'ethereum', 'dogecoin'];
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coins.join(',')}&vs_currencies=usd`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({ error: text });
+    }
+
+    const data = await response.json();
+    const results = coins.map(coin => ({
+      symbol: coin.toUpperCase(),
+      price: data[coin]?.usd || null,
     }));
 
-    const recommendations = {
-      buy: [],
-      sell: [],
-      hold: [],
-    };
+    cache = { results };
+    cacheTimestamp = now;
 
-    topFive.forEach((stock) => {
-      const { symbol, price } = stock;
-      const mockSpread = 0.5;
-
-      if (Math.floor(price) % 2 === 1) {
-        recommendations.buy.push({
-          symbol,
-          buyPrice: price,
-          sellPrice: price + mockSpread,
-        });
-      } else if (Math.floor(price) % 2 === 0) {
-        recommendations.sell.push({
-          symbol,
-          sellPrice: price,
-          buyPrice: price - mockSpread,
-        });
-      } else {
-        recommendations.hold.push({
-          symbol,
-          price,
-          buyPrice: price - mockSpread,
-          sellPrice: price + mockSpread,
-        });
-      }
-    });
-
-    res.status(200).json(recommendations);
+    res.status(200).json(cache);
   } catch (error) {
-    console.error("Stock fetch failed", error);
-    res.status(500).json({ error: "Failed to fetch stock data" });
+    res.status(500).json({ error: 'Failed to fetch data from CoinGecko' });
   }
 }
