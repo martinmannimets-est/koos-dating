@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 const fetchStockData = async () => {
-  // Dummy example: Replace this with your real API call (e.g. Yahoo Finance)
-  // Simulate some random price data
+  // Dummy data — asenda siia päris API päring
   return {
     buy: [
-      { symbol: "AAPL", price: 170.45, sellPrice: 169.90 },
-      { symbol: "TSLA", price: 720.30, sellPrice: 715.00 },
+      { symbol: "AAPL", buyPrice: 170.45, sellPrice: 171.00 },
+      { symbol: "TSLA", buyPrice: 720.30, sellPrice: 722.50 },
     ],
     sell: [
-      { symbol: "AMZN", price: 3200.55, buyPrice: 3210.20 },
-      { symbol: "NFLX", price: 480.10, buyPrice: 485.50 },
+      { symbol: "AMZN", sellPrice: 3200.55, buyPrice: 3195.20 },
+      { symbol: "NFLX", sellPrice: 480.10, buyPrice: 478.00 },
     ],
     hold: [
       { symbol: "GOOGL", price: 2850.00, buyPrice: 2840.00, sellPrice: 2860.00 },
@@ -21,21 +20,27 @@ const fetchStockData = async () => {
 export default function Home() {
   const [data, setData] = useState({ buy: [], sell: [], hold: [] });
   const [countdown, setCountdown] = useState(5);
+  const countdownRef = useRef(5);
 
   const loadData = async () => {
     const newData = await fetchStockData();
     setData(newData);
     setCountdown(5);
+    countdownRef.current = 5;
   };
 
   useEffect(() => {
     loadData();
+
+    // Refresh data every 5 seconds
     const interval = setInterval(() => {
       loadData();
     }, 5000);
 
+    // Countdown timer every 1 second
     const countdownInterval = setInterval(() => {
-      setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      countdownRef.current = countdownRef.current > 0 ? countdownRef.current - 1 : 0;
+      setCountdown(countdownRef.current);
     }, 1000);
 
     return () => {
@@ -56,9 +61,9 @@ export default function Home() {
         <section style={{ flex: 1, border: "2px solid green", padding: 15, borderRadius: 8 }}>
           <h2 style={{ color: "green" }}>BUY</h2>
           {data.buy.length === 0 && <p>No BUY recommendations currently</p>}
-          {data.buy.map(({ symbol, price, sellPrice }) => (
+          {data.buy.map(({ symbol, buyPrice, sellPrice }) => (
             <div key={symbol} style={{ marginBottom: 10 }}>
-              <strong>{symbol}</strong>: Buy Price ${price.toFixed(2)} / Sell Price ${sellPrice.toFixed(2)}
+              <strong>{symbol}</strong>: Buy Price <b>${buyPrice.toFixed(2)}</b> / Sell Price ${sellPrice.toFixed(2)}
             </div>
           ))}
         </section>
@@ -67,9 +72,9 @@ export default function Home() {
         <section style={{ flex: 1, border: "2px solid red", padding: 15, borderRadius: 8 }}>
           <h2 style={{ color: "red" }}>SELL</h2>
           {data.sell.length === 0 && <p>No SELL recommendations currently</p>}
-          {data.sell.map(({ symbol, price, buyPrice }) => (
+          {data.sell.map(({ symbol, sellPrice, buyPrice }) => (
             <div key={symbol} style={{ marginBottom: 10 }}>
-              <strong>{symbol}</strong>: Sell Price ${price.toFixed(2)} / Buy Price ${buyPrice.toFixed(2)}
+              <strong>{symbol}</strong>: Sell Price <b>${sellPrice.toFixed(2)}</b> / Buy Price ${buyPrice.toFixed(2)}
             </div>
           ))}
         </section>
@@ -80,7 +85,7 @@ export default function Home() {
           {data.hold.length === 0 && <p>No HOLD recommendations currently</p>}
           {data.hold.map(({ symbol, price, buyPrice, sellPrice }) => (
             <div key={symbol} style={{ marginBottom: 10 }}>
-              <strong>{symbol}</strong>: Price ${price.toFixed(2)} / Buy ${buyPrice.toFixed(2)} / Sell ${sellPrice.toFixed(2)}
+              <strong>{symbol}</strong>: Current Price ${price.toFixed(2)} / Buy ${buyPrice.toFixed(2)} / Sell ${sellPrice.toFixed(2)}
             </div>
           ))}
         </section>
