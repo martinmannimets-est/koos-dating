@@ -1,11 +1,20 @@
 {
-  "name": "koos-dating-trading-bot",
+  "name": "koos-dating-trading",
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": "18.x"
+    "node": ">=18"
   },
   "scripts": {
-    "start": "node pages/index.js"
+    "dev": "next dev",
+    "start": "next start",
+    "build": "next build",
+    "bot": "node bot/engine.js",
+    "test-trade": "node bot/engine.js single"
+  },
+  "dependencies": {
+    "next": "13.5.4",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   }
 }
