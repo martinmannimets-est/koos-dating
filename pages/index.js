@@ -1,148 +1,90 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 
-const SYMBOLS = ["AAPL", "MSFT", "TSLA", "BTC-USD", "ETH-USD"];
-
-function calculateMA(prices, period = 5) {
-  if (prices.length < period) return null;
-  const slice = prices.slice(-period);
-  const sum = slice.reduce((a, b) => a + b, 0);
-  return sum / period;
-}
-
-function getRecommendation(shortMA, longMA) {
-  if (shortMA === null || longMA === null) return "HOLD";
-  if (shortMA > longMA) return "BUY";
-  if (shortMA < longMA) return "SELL";
-  return "HOLD";
-}
+const fetchStockData = async () => {
+  // Dummy example: Replace this with your real API call (e.g. Yahoo Finance)
+  // Simulate some random price data
+  return {
+    buy: [
+      { symbol: "AAPL", price: 170.45, sellPrice: 169.90 },
+      { symbol: "TSLA", price: 720.30, sellPrice: 715.00 },
+    ],
+    sell: [
+      { symbol: "AMZN", price: 3200.55, buyPrice: 3210.20 },
+      { symbol: "NFLX", price: 480.10, buyPrice: 485.50 },
+    ],
+    hold: [
+      { symbol: "GOOGL", price: 2850.00, buyPrice: 2840.00, sellPrice: 2860.00 },
+    ],
+  };
+};
 
 export default function Home() {
-  const [data, setData] = useState({});
-  const [countdown, setCountdown] = useState(30);
-  const priceHistory = useRef({}); // store historical prices per symbol
+  const [data, setData] = useState({ buy: [], sell: [], hold: [] });
+  const [countdown, setCountdown] = useState(5);
 
-  async function fetchPrices() {
-    try {
-      const res = await fetch(
-        `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${SYMBOLS.join(",")}`
-      );
-      const json = await res.json();
-      if (!json.quoteResponse || !json.quoteResponse.result) {
-        throw new Error("Invalid data");
-      }
-      const results = json.quoteResponse.result;
+  const loadData = async () => {
+    const newData = await fetchStockData();
+    setData(newData);
+    setCountdown(5);
+  };
 
-      const newData = {};
-      results.forEach((item) => {
-        const symbol = item.symbol;
-        const price = item.regularMarketPrice;
-        const prevClose = item.regularMarketPreviousClose;
-
-        // Update price history
-        if (!priceHistory.current[symbol]) priceHistory.current[symbol] = [];
-        priceHistory.current[symbol].push(price);
-        // Keep last 20 prices max
-        if (priceHistory.current[symbol].length > 20)
-          priceHistory.current[symbol].shift();
-
-        // Calculate short MA (5) and long MA (10)
-        const shortMA = calculateMA(priceHistory.current[symbol], 5);
-        const longMA = calculateMA(priceHistory.current[symbol], 10);
-
-        const recommendation = getRecommendation(shortMA, longMA);
-
-        newData[symbol] = {
-          price,
-          prevClose,
-          change: price - prevClose,
-          recommendation,
-        };
-      });
-      setData(newData);
-    } catch (error) {
-      console.error("Fetch error:", error);
-    }
-  }
-
-  // Fetch prices initially and every 30 seconds
   useEffect(() => {
-    fetchPrices();
+    loadData();
     const interval = setInterval(() => {
-      fetchPrices();
-      setCountdown(30);
-    }, 30000);
+      loadData();
+    }, 5000);
 
-    return () => clearInterval(interval);
-  }, []);
-
-  // Countdown timer for refresh
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((c) => (c > 0 ? c - 1 : 30));
+    const countdownInterval = setInterval(() => {
+      setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
-    return () => clearInterval(timer);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(countdownInterval);
+    };
   }, []);
 
   return (
-    <div style={{ maxWidth: 700, margin: "2rem auto", fontFamily: "Arial, sans-serif" }}>
-      <h1>Day Trading Signals</h1>
-      <p>Prices update every 30 seconds. Next refresh in: {countdown}s</p>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ borderBottom: "2px solid #333" }}>
-            <th style={{ textAlign: "left", padding: "8px" }}>Symbol</th>
-            <th style={{ textAlign: "right", padding: "8px" }}>Price (USD)</th>
-            <th style={{ textAlign: "right", padding: "8px" }}>Change</th>
-            <th style={{ textAlign: "center", padding: "8px" }}>Recommendation</th>
-          </tr>
-        </thead>
-        <tbody>
-          {SYMBOLS.map((symbol) => {
-            const item = data[symbol];
-            if (!item) {
-              return (
-                <tr key={symbol}>
-                  <td>{symbol}</td>
-                  <td colSpan={3} style={{ textAlign: "center" }}>
-                    Loading...
-                  </td>
-                </tr>
-              );
-            }
-            return (
-              <tr key={symbol} style={{ borderBottom: "1px solid #ccc" }}>
-                <td>{symbol}</td>
-                <td style={{ textAlign: "right" }}>{item.price.toFixed(2)}</td>
-                <td
-                  style={{
-                    textAlign: "right",
-                    color: item.change >= 0 ? "green" : "red",
-                  }}
-                >
-                  {item.change >= 0 ? "▲" : "▼"} {item.change.toFixed(2)}
-                </td>
-                <td
-                  style={{
-                    textAlign: "center",
-                    fontWeight: "bold",
-                    color:
-                      item.recommendation === "BUY"
-                        ? "green"
-                        : item.recommendation === "SELL"
-                        ? "red"
-                        : "gray",
-                  }}
-                >
-                  {item.recommendation}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <footer style={{ marginTop: 20, fontSize: "0.9em", color: "#555" }}>
-        Data from Yahoo Finance unofficial API. Use for educational purposes only.
-      </footer>
+    <div style={{ maxWidth: 900, margin: "auto", padding: 20, fontFamily: "Arial, sans-serif" }}>
+      <h1 style={{ textAlign: "center" }}>Day Trading AI Recommendations</h1>
+      <p style={{ textAlign: "center", fontSize: 14, color: "#555" }}>
+        Refreshing prices in: {countdown} second{countdown !== 1 ? "s" : ""}
+      </p>
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
+        {/* BUY Section */}
+        <section style={{ flex: 1, border: "2px solid green", padding: 15, borderRadius: 8 }}>
+          <h2 style={{ color: "green" }}>BUY</h2>
+          {data.buy.length === 0 && <p>No BUY recommendations currently</p>}
+          {data.buy.map(({ symbol, price, sellPrice }) => (
+            <div key={symbol} style={{ marginBottom: 10 }}>
+              <strong>{symbol}</strong>: Buy Price ${price.toFixed(2)} / Sell Price ${sellPrice.toFixed(2)}
+            </div>
+          ))}
+        </section>
+
+        {/* SELL Section */}
+        <section style={{ flex: 1, border: "2px solid red", padding: 15, borderRadius: 8 }}>
+          <h2 style={{ color: "red" }}>SELL</h2>
+          {data.sell.length === 0 && <p>No SELL recommendations currently</p>}
+          {data.sell.map(({ symbol, price, buyPrice }) => (
+            <div key={symbol} style={{ marginBottom: 10 }}>
+              <strong>{symbol}</strong>: Sell Price ${price.toFixed(2)} / Buy Price ${buyPrice.toFixed(2)}
+            </div>
+          ))}
+        </section>
+
+        {/* HOLD Section */}
+        <section style={{ flex: 1, border: "2px solid orange", padding: 15, borderRadius: 8 }}>
+          <h2 style={{ color: "orange" }}>HOLD</h2>
+          {data.hold.length === 0 && <p>No HOLD recommendations currently</p>}
+          {data.hold.map(({ symbol, price, buyPrice, sellPrice }) => (
+            <div key={symbol} style={{ marginBottom: 10 }}>
+              <strong>{symbol}</strong>: Price ${price.toFixed(2)} / Buy ${buyPrice.toFixed(2)} / Sell ${sellPrice.toFixed(2)}
+            </div>
+          ))}
+        </section>
+      </div>
     </div>
   );
 }
