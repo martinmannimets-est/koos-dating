@@ -1,32 +1,51 @@
+import fetch from "node-fetch";
+
 export default async function handler(req, res) {
-  const symbols = ["AAPL", "GOOGL", "AMZN"];
-  const apiKey = process.env.POLYGON_API_KEY;
-  const url = `https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/${new Date().toISOString().split("T")[0]}`;
+  const coins = ["bitcoin", "ethereum", "cardano", "dogecoin", "solana"];
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    });
-    const data = await response.json();
-
-    if (!data.results) {
-      return res.status(404).json({ error: "No data found" });
-    }
-
-    const stocks = data.results.filter((stock) =>
-      symbols.includes(stock.T)
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coins.join(
+        ","
+      )}&vs_currencies=usd`
     );
 
+    if (!response.ok) {
+      throw new Error("Failed to fetch data from CoinGecko");
+    }
+
+    const data = await response.json();
+
     const recommendations = {
-      buy: stocks.filter((stock) => stock.c > stock.o),
-      sell: stocks.filter((stock) => stock.c < stock.o),
-      hold: stocks.filter((stock) => stock.c === stock.o),
+      buy: [],
+      sell: [],
+      hold: [],
     };
+
+    for (const coin of coins) {
+      const price = data[coin]?.usd || 0;
+
+      if (Math.floor(price) % 2 === 0) {
+        recommendations.sell.push({
+          symbol: coin.toUpperCase(),
+          price,
+        });
+      } else if (Math.floor(price) % 2 === 1) {
+        recommendations.buy.push({
+          symbol: coin.toUpperCase(),
+          price,
+        });
+      } else {
+        recommendations.hold.push({
+          symbol: coin.toUpperCase(),
+          price,
+        });
+      }
+    }
 
     res.status(200).json(recommendations);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch stock data" });
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch crypto data" });
   }
 }

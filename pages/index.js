@@ -1,73 +1,74 @@
-export default function Home() {
-  const [recommendations, setRecommendations] = React.useState(null);
-  const [seconds, setSeconds] = React.useState(5);
+import { useEffect, useState } from "react";
 
-  React.useEffect(() => {
-    fetch('/api/stocks')
-      .then((res) => res.json())
-      .then(setRecommendations);
+export default function Home() {
+  const [data, setData] = useState({ buy: [], sell: [], hold: [] });
+  const [countdown, setCountdown] = useState(5);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res = await fetch("/api/stocks");
+      const json = await res.json();
+      setData(json);
+    };
+
+    fetchData();
 
     const interval = setInterval(() => {
-      fetch('/api/stocks')
-        .then((res) => res.json())
-        .then(setRecommendations);
-    }, 5000);
-
-    const countdown = setInterval(() => {
-      setSeconds((s) => (s === 0 ? 5 : s - 1));
+      setCountdown((prev) => {
+        if (prev === 1) {
+          fetchData();
+          return 5;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
-    return () => {
-      clearInterval(interval);
-      clearInterval(countdown);
-    };
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <h1 className="text-4xl font-bold text-center mb-6 text-indigo-600">
-        Trading Recommendations
-      </h1>
-      <p className="text-center mb-8 text-gray-700">
-        Refreshes every 5 seconds — Next refresh in: {seconds} sec
-      </p>
+    <div style={{ padding: 20, fontFamily: "Arial, sans-serif" }}>
+      <h1>Crypto Trading Recommendations (refreshes every 5 seconds)</h1>
+      <p>Next refresh in: {countdown} sec</p>
 
-      {recommendations ? (
-        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-          {['buy', 'sell', 'hold'].map((type) => (
-            <section key={type} className="bg-white rounded shadow p-4">
-              <h2 className="text-2xl font-semibold capitalize mb-4">{type}</h2>
-              {recommendations[type].length === 0 ? (
-                <p className="text-gray-500">No stocks</p>
-              ) : (
-                <ul>
-                  {recommendations[type].map((stock) => (
-                    <li key={stock.symbol} className="mb-2 border-b border-gray-200 pb-2">
-                      <span className="font-medium">{stock.symbol}</span> —{' '}
-                      {type === 'hold' ? (
-                        <>
-                          Price: ${stock.price.toFixed(2)} <br />
-                          Buy: ${stock.buyPrice.toFixed(2)}, Sell: ${stock.sellPrice.toFixed(2)}
-                        </>
-                      ) : type === 'buy' ? (
-                        <>
-                          Buy at ${stock.buyPrice.toFixed(2)}, Sell at ${stock.sellPrice.toFixed(2)}
-                        </>
-                      ) : (
-                        <>
-                          Sell at ${stock.sellPrice.toFixed(2)}, Buy at ${stock.buyPrice.toFixed(2)}
-                        </>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          ))}
-        </div>
+      <h2>BUY</h2>
+      {data.buy.length === 0 ? (
+        <p>No cryptos</p>
       ) : (
-        <p className="text-center text-gray-600">Loading...</p>
+        <ul>
+          {data.buy.map(({ symbol, price }) => (
+            <li key={symbol}>
+              {symbol} - ${price}
+            </li>
+          ))}
+        </ul>
       )}
-    </main>
+
+      <h2>SELL</h2>
+      {data.sell.length === 0 ? (
+        <p>No cryptos</p>
+      ) : (
+        <ul>
+          {data.sell.map(({ symbol, price }) => (
+            <li key={symbol}>
+              {symbol} - ${price}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h2>HOLD</h2>
+      {data.hold.length === 0 ? (
+        <p>No cryptos</p>
+      ) : (
+        <ul>
+          {data.hold.map(({ symbol, price }) => (
+            <li key={symbol}>
+              {symbol} - ${price}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
