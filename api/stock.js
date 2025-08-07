@@ -1,29 +1,28 @@
+import yahooFinance from 'yahoo-finance2';
+
+const STOCKS = ['AAPL', 'TSLA', 'AMZN', 'GOOGL', 'MSFT'];
+
 export default async function handler(req, res) {
-  const symbol = req.query.symbol || "AAPL";
-
   try {
-    const response = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`
-    );
-    const data = await response.json();
+    const results = [];
 
-    if (!data.quoteResponse || !data.quoteResponse.result.length) {
-      return res.status(404).json({ error: "Symbol not found" });
+    for (const symbol of STOCKS) {
+      const quote = await yahooFinance.quoteSummary(symbol, { modules: ['price'] });
+      const price = quote.price.regularMarketPrice;
+      const previousClose = quote.price.regularMarketPreviousClose;
+
+      results.push({ symbol, price, previousClose });
     }
 
-    const quote = data.quoteResponse.result[0];
+    // Lihtne analüüs: kui hind tõusis võrreldes eelmise sulgemishinnaga, siis "BUY"
+    // Kui langes, siis "SELL", muidu "HOLD"
+    const buy = results.filter(stock => stock.price > stock.previousClose);
+    const sell = results.filter(stock => stock.price < stock.previousClose);
+    const hold = results.filter(stock => stock.price === stock.previousClose);
 
-    res.status(200).json({
-      symbol: quote.symbol,
-      price: quote.regularMarketPrice,
-      change: quote.regularMarketChange,
-      changePercent: quote.regularMarketChangePercent,
-      marketState: quote.marketState,
-      currency: quote.currency,
-      bid: quote.bid,
-      ask: quote.ask,
-    });
+    res.status(200).json({ buy, sell, hold });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch data" });
+    console.error('Error fetching stock data:', error);
+    res.status(500).json({ error: 'Failed to fetch stock data' });
   }
 }
