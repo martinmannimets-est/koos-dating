@@ -1,38 +1,53 @@
 // pages/api/trade.js
-import { tradeCycle, getPublicState, resetState, fetchTop50Prices } from '../../lib/trading.js';
+let tradeHistory = []; // Püsib serverless sessiooni sees, mitte andmebaasis
 
 export default async function handler(req, res) {
   try {
-    if (req.method === 'GET') {
-      // Return current public state and last fetched top50 prices (if any)
-      const state = getPublicState();
-      // Also optionally return fresh top50 prices for display
-      let top50 = [];
-      try {
-        top50 = await fetchTop50Prices();
-      } catch (e) {
-        // ignore price fetch error here; UI can still use state.lastPrices
-        console.warn('Could not fetch top50 in GET /api/trade:', e?.message);
-      }
-      return res.status(200).json({ state, top50 });
+    const apiUrl = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=eur&order=market_cap_desc&per_page=50&page=1&sparkline=false&locale=en';
+    const response = await fetch(apiUrl, { cache: 'no-store' });
+
+    if (!response.ok) {
+      throw new Error(`CoinGecko API error: ${response.status}`);
     }
 
-    if (req.method === 'POST') {
-      // Trigger one trade cycle (simulate buy/sell decisions)
-      const result = await tradeCycle();
-      return res.status(200).json(result);
-    }
+    const data = await response.json();
 
-    if (req.method === 'DELETE') {
-      // Reset in-memory state (for debugging)
-      const s = resetState();
-      return res.status(200).json({ reset: true, state: s });
-    }
+    // Lihtne AI otsustusloogika
+    const decisions = data.map(coin => {
+      const priceChange = coin.price_change_percentage_24h;
+      let action = 'HOLD';
 
-    res.setHeader('Allow', ['GET', 'POST', 'DELETE']);
-    res.status(405).end('Method Not Allowed');
-  } catch (err) {
-    console.error('/api/trade error:', err?.stack || err);
-    res.status(500).json({ error: err?.message || 'Server error' });
+      if (priceChange > 2) action = 'BUY';
+      else if (priceChange < -2) action = 'SELL';
+
+      // Logime tehingu
+      tradeHistory.push({
+        time: new Date().toISOString(),
+        coin: coin.symbol.toUpperCase(),
+        price: coin.current_price,
+        change24h: priceChange,
+        action
+      });
+
+      return {
+        name: coin.name,
+        symbol: coin.symbol.toUpperCase(),
+        price: coin.current_price,
+        change24h: priceChange,
+        action
+      };
+    });
+
+    // Hoia ainult viimase 24h tehingud
+    const now = Date.now();
+    tradeHistory = tradeHistory.filter(t => now - new Date(t.time).getTime() < 24 * 60 * 60 * 1000);
+
+    res.status(200).json({
+      prices: decisions,
+      history: tradeHistory
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 }
