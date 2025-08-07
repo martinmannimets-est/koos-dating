@@ -6,7 +6,7 @@ export default function Home() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res = await fetch("/api/stocks");
+      const res = await fetch("/api/crypto");
       const json = await res.json();
       setData(json);
       setCountdown(5);
