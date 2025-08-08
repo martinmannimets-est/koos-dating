@@ -1,20 +1,18 @@
 {
-  "name": "koos-dating-trading",
+  "name": "ai-crypto-trading-bot",
   "version": "1.0.0",
-  "type": "module",
-  "engines": {
-    "node": ">=18"
-  },
+  "private": true,
   "scripts": {
     "dev": "next dev",
-    "start": "next start",
     "build": "next build",
-    "bot": "node bot/engine.js",
-    "test-trade": "node bot/engine.js single"
+    "start": "next start"
   },
   "dependencies": {
-    "next": "13.5.4",
+    "axios": "^1.4.0",
+    "chart.js": "^4.3.0",
+    "next": "13.4.7",
     "react": "18.2.0",
+    "react-chartjs-2": "^5.2.0",
     "react-dom": "18.2.0"
   }
 }
